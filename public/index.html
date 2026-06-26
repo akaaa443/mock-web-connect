@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mock Web Connect – Control Panel</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f0f2f5;
+      color: #1a1a2e;
+      min-height: 100vh;
+    }
+
+    header {
+      background: #1a1a2e;
+      color: #fff;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    header h1 { font-size: 1.1rem; font-weight: 600; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 99px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      background: #2d2d44;
+      color: #aaa;
+    }
+    .badge.connected { background: #1a3a2e; color: #4ade80; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+
+    main {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 20px;
+      padding: 24px;
+      max-width: 1280px;
+      margin: 0 auto;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.08);
+    }
+    .card h2 {
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      color: #888;
+      margin-bottom: 14px;
+    }
+
+    /* File import/export row */
+    .file-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      padding: 12px 14px;
+      background: #f8f9ff;
+      border: 1.5px dashed #c7c9e8;
+      border-radius: 10px;
+      margin-bottom: 20px;
+    }
+    .file-row span { flex: 1; font-size: 0.82rem; color: #666; }
+    .file-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 14px;
+      border: none;
+      border-radius: 7px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: opacity .15s;
+    }
+    .file-btn:hover { opacity: .8; }
+    .btn-download { background: #e0f2fe; color: #0369a1; }
+    .btn-browse   { background: #ede9fe; color: #5b21b6; }
+    #fileInput { display: none; }
+    .loaded-name {
+      font-size: 0.75rem;
+      color: #5b21b6;
+      font-weight: 600;
+      max-width: 140px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* Profile form */
+    .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
+    .field { display: flex; flex-direction: column; gap: 4px; }
+    .field.full { grid-column: 1 / -1; }
+    label { font-size: 0.7rem; font-weight: 600; color: #555; text-transform: uppercase; letter-spacing: .04em; }
+    input[type=text], select {
+      border: 1px solid #ddd;
+      border-radius: 7px;
+      padding: 8px 10px;
+      font-size: 0.875rem;
+      outline: none;
+      transition: border-color .15s;
+    }
+    input[type=text]:focus, select:focus { border-color: #6366f1; }
+
+    .save-btn {
+      margin-top: 16px;
+      width: 100%;
+      padding: 10px;
+      background: #6366f1;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .15s;
+    }
+    .save-btn:hover { background: #4f46e5; }
+    .save-btn:disabled { background: #a5b4fc; cursor: not-allowed; }
+
+    /* Actions */
+    .actions { display: flex; flex-direction: column; gap: 10px; }
+    .action-btn {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 16px;
+      border: none;
+      border-radius: 10px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity .15s, transform .1s;
+      width: 100%;
+    }
+    .action-btn:active { transform: scale(0.97); }
+    .action-btn .icon { font-size: 1.3rem; }
+    .action-btn .desc { display: flex; flex-direction: column; text-align: left; }
+    .action-btn .desc span { font-size: 0.72rem; font-weight: 400; opacity: .7; margin-top: 1px; }
+    .btn-insert  { background: #f0fdf4; color: #15803d; border: 1.5px solid #bbf7d0; }
+    .btn-success { background: #eff6ff; color: #1d4ed8; border: 1.5px solid #bfdbfe; }
+    .btn-failed  { background: #fef2f2; color: #b91c1c; border: 1.5px solid #fecaca; }
+    .btn-remove  { background: #fffbeb; color: #92400e; border: 1.5px solid #fde68a; }
+    .btn-clone   { background: #fdf4ff; color: #7e22ce; border: 1.5px solid #e9d5ff; }
+    .action-btn:hover { opacity: .85; }
+
+    /* Clone card status strip */
+    .reader-strip {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      margin-bottom: 10px;
+    }
+    .reader-strip.idle     { background: #f1f5f9; color: #64748b; }
+    .reader-strip.waiting  { background: #fdf4ff; color: #7e22ce; }
+    .reader-strip.reading  { background: #eff6ff; color: #1d4ed8; }
+    .reader-strip.done     { background: #f0fdf4; color: #15803d; }
+    .reader-strip.error    { background: #fef2f2; color: #b91c1c; }
+    .reader-strip .ri      { font-size: 1.1rem; }
+
+    .error-field { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+    .error-field label { font-size: 0.72rem; font-weight: 600; color: #b91c1c; text-transform: uppercase; }
+
+    /* Log */
+    .log-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 320px;
+      overflow-y: auto;
+    }
+    .log-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: 7px;
+      font-size: 0.78rem;
+      line-height: 1.4;
+    }
+    .log-item.out { background: #eff6ff; color: #1e40af; }
+    .log-item.in  { background: #f0fdf4; color: #166534; }
+    .log-arrow { font-weight: 700; flex-shrink: 0; }
+    .log-time  { color: #888; flex-shrink: 0; font-size: 0.7rem; white-space: nowrap; }
+    .log-event { font-weight: 600; }
+    .log-empty { color: #aaa; font-size: 0.82rem; text-align: center; padding: 20px 0; }
+
+    .toast {
+      position: fixed;
+      bottom: 24px; right: 24px;
+      background: #1a1a2e;
+      color: #fff;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      opacity: 0;
+      transform: translateY(8px);
+      transition: opacity .2s, transform .2s;
+      pointer-events: none;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>🃏 Mock Web Connect – Control Panel</h1>
+  <span id="statusBadge" class="badge"><span class="dot"></span> 0 clients</span>
+</header>
+
+<main>
+  <!-- Left: Form -->
+  <div class="card">
+    <h2>ID Card Profile</h2>
+
+    <!-- Download / Browse row -->
+    <div class="file-row">
+      <span id="loadedFileName">No file loaded</span>
+      <input type="file" id="fileInput" accept=".json" onchange="onFileBrowse(event)" />
+      <button class="file-btn btn-browse" onclick="document.getElementById('fileInput').click()">📂 Browse</button>
+      <button class="file-btn btn-download" onclick="downloadProfile()">⬇️ Download</button>
+    </div>
+
+    <form id="profileForm">
+      <div class="field-grid">
+        <div class="field full">
+          <label>National ID</label>
+          <input type="text" name="NationalID" maxlength="13" />
+        </div>
+        <div class="field">
+          <label>Thai Title</label>
+          <input type="text" name="ThaiTitleName" placeholder="นาย / นาง / นางสาว" />
+        </div>
+        <div class="field">
+          <label>English Title</label>
+          <input type="text" name="EnglishTitleName" placeholder="MR. / MRS. / MISS" />
+        </div>
+        <div class="field">
+          <label>Thai First Name</label>
+          <input type="text" name="ThaiFirstName" />
+        </div>
+        <div class="field">
+          <label>Thai Last Name</label>
+          <input type="text" name="ThaiLastName" />
+        </div>
+        <div class="field">
+          <label>English First Name</label>
+          <input type="text" name="EnglishFirstName" />
+        </div>
+        <div class="field">
+          <label>English Last Name</label>
+          <input type="text" name="EnglishLastName" />
+        </div>
+        <div class="field">
+          <label>Birthdate (YYYYMMDD)</label>
+          <input type="text" name="Birthdate" placeholder="19900115" maxlength="8" />
+        </div>
+        <div class="field">
+          <label>Sex</label>
+          <select name="Sex">
+            <option value="1">1 – Male</option>
+            <option value="2">2 – Female</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Address (homeNo)</label>
+          <input type="text" name="Address" />
+        </div>
+        <div class="field">
+          <label>Moo</label>
+          <input type="text" name="Moo" />
+        </div>
+        <div class="field">
+          <label>Soi</label>
+          <input type="text" name="Soi" />
+        </div>
+        <div class="field">
+          <label>Thanon (street)</label>
+          <input type="text" name="Thanon" />
+        </div>
+        <div class="field">
+          <label>Tumbol</label>
+          <input type="text" name="Tumbol" />
+        </div>
+        <div class="field">
+          <label>Amphur</label>
+          <input type="text" name="Amphur" />
+        </div>
+        <div class="field full">
+          <label>Province</label>
+          <input type="text" name="Province" />
+        </div>
+        <div class="field">
+          <label>Issue Date (YYYYMMDD)</label>
+          <input type="text" name="IssueDate" placeholder="20200101" maxlength="8" />
+        </div>
+        <div class="field">
+          <label>Expire Date (YYYYMMDD)</label>
+          <input type="text" name="ExpireDate" placeholder="20300101" maxlength="8" />
+        </div>
+        <div class="field">
+          <label>Chip ID</label>
+          <input type="text" name="ChipID" />
+        </div>
+        <div class="field">
+          <label>Request No</label>
+          <input type="text" name="RequestNo" />
+        </div>
+        <div class="field full">
+          <label>Laser ID</label>
+          <input type="text" name="LaserID" />
+        </div>
+      </div>
+      <button type="submit" class="save-btn">💾 Apply to Server</button>
+    </form>
+  </div>
+
+  <!-- Right: Actions + Log -->
+  <div style="display:flex;flex-direction:column;gap:20px;">
+    <div class="card">
+      <h2>Actions</h2>
+      <div class="actions">
+        <button class="action-btn btn-insert" onclick="trigger('insert')">
+          <span class="icon">📥</span>
+          <span class="desc">Insert Card<span>Send OnCardInserted</span></span>
+        </button>
+        <button class="action-btn btn-success" onclick="trigger('success')">
+          <span class="icon">✅</span>
+          <span class="desc">Read Success<span>Insert → Progress → Completed</span></span>
+        </button>
+        <div>
+          <button class="action-btn btn-failed" onclick="trigger('failed')">
+            <span class="icon">❌</span>
+            <span class="desc">Read Failed<span>Insert → OnCardLoadError</span></span>
+          </button>
+          <div class="error-field">
+            <label>Error message (optional)</label>
+            <input type="text" id="errorMsg" placeholder="ไม่สามารถอ่านบัตรประชาชนได้" />
+          </div>
+        </div>
+        <button class="action-btn btn-remove" onclick="trigger('remove')">
+          <span class="icon">🔄</span>
+          <span class="desc">Remove Card<span>Send OnCardRemoved</span></span>
+        </button>
+
+        <hr style="border:none;border-top:1px solid #f0f0f0;" />
+
+        <!-- Clone Real Card -->
+        <div id="readerStrip" class="reader-strip idle">
+          <span class="ri">💳</span>
+          <span id="readerStripText">No reader detected</span>
+        </div>
+        <button class="action-btn btn-clone" onclick="cloneRealCard()">
+          <span class="icon">🖨️</span>
+          <span class="desc">Clone Real Card<span>Read physical card → fill form</span></span>
+        </button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Event Log</h2>
+      <ul class="log-list" id="logList">
+        <li class="log-empty">No events yet</li>
+      </ul>
+    </div>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  const BASE = 'https://localhost:8088'
+
+  // -----------------------------------------------------------------------
+  // Init — load current profile from server
+  // -----------------------------------------------------------------------
+  async function init () {
+    const r = await fetch(`${BASE}/api/profile`)
+    fillForm(await r.json())
+  }
+
+  // -----------------------------------------------------------------------
+  // Browse .json file → fill form
+  // -----------------------------------------------------------------------
+  function onFileBrowse (event) {
+    const file = event.target.files[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target.result)
+        fillForm(data)
+        document.getElementById('loadedFileName').textContent = file.name
+        document.getElementById('loadedFileName').style.color = '#5b21b6'
+        showToast(`📂 Loaded: ${file.name}`)
+      } catch {
+        showToast('Invalid JSON file')
+      }
+    }
+    reader.readAsText(file)
+    // reset so the same file can be re-selected
+    event.target.value = ''
+  }
+
+  // -----------------------------------------------------------------------
+  // Download current form as .json
+  // -----------------------------------------------------------------------
+  function downloadProfile () {
+    const data = getFormData()
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `id-card-profile-${data.NationalID || 'unknown'}.json`
+    a.click()
+    URL.revokeObjectURL(a.href)
+  }
+
+  // -----------------------------------------------------------------------
+  // Apply form to server
+  // -----------------------------------------------------------------------
+  document.getElementById('profileForm').addEventListener('submit', async (e) => {
+    e.preventDefault()
+    const btn = e.target.querySelector('button[type=submit]')
+    btn.disabled = true; btn.textContent = 'Applying...'
+    await fetch(`${BASE}/api/profile`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(getFormData())
+    })
+    btn.disabled = false; btn.textContent = '💾 Apply to Server'
+    showToast('Profile applied!')
+  })
+
+  // -----------------------------------------------------------------------
+  // Trigger actions
+  // -----------------------------------------------------------------------
+  async function trigger (action) {
+    const body = action === 'failed' ? { message: document.getElementById('errorMsg').value } : {}
+    await fetch(`${BASE}/api/trigger/${action}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    })
+    showToast(`Triggered: ${action}`)
+  }
+
+  // -----------------------------------------------------------------------
+  // Clone real card — trigger PC/SC reader + poll for result
+  // -----------------------------------------------------------------------
+  async function cloneRealCard () {
+    await fetch(`${BASE}/api/reader/start`, { method: 'POST' })
+    showToast('🖨️ Insert your physical card into the reader...')
+  }
+
+  async function pollReaderStatus () {
+    try {
+      const s = await (await fetch(`${BASE}/api/reader-status`)).json()
+      const strip = document.getElementById('readerStrip')
+      const text  = document.getElementById('readerStripText')
+
+      const MAP = {
+        idle:    { cls: 'idle',    msg: 'No reader detected' },
+        waiting: { cls: 'waiting', msg: `Reader ready: ${s.readerName || ''} — insert card` },
+        reading: { cls: 'reading', msg: 'Reading card...' },
+        done:    { cls: 'done',    msg: 'Card read! Profile filled in form.' },
+      }
+      const info = s.lastError
+        ? { cls: 'error', msg: s.lastError }
+        : (MAP[s.status] || MAP.idle)
+
+      strip.className = `reader-strip ${info.cls}`
+      text.textContent = info.msg
+
+      if (s.status === 'done') {
+        const profile = await (await fetch(`${BASE}/api/profile`)).json()
+        fillForm(profile)
+        document.getElementById('loadedFileName').textContent = 'Cloned from physical card'
+        document.getElementById('loadedFileName').style.color = '#7e22ce'
+      }
+    } catch (_) {}
+  }
+
+  // -----------------------------------------------------------------------
+  // Poll status + event log
+  // -----------------------------------------------------------------------
+  async function pollStatus () {
+    try {
+      const { clients, log } = await (await fetch(`${BASE}/api/status`)).json()
+      const badge = document.getElementById('statusBadge')
+      badge.innerHTML = `<span class="dot"></span> ${clients} client${clients !== 1 ? 's' : ''} connected`
+      badge.className = `badge ${clients > 0 ? 'connected' : ''}`
+
+      const list = document.getElementById('logList')
+      if (!log.length) { list.innerHTML = '<li class="log-empty">No events yet</li>'; return }
+      list.innerHTML = log.map(e => {
+        const time = e.time.substring(11, 19)
+        const eventName = e.payload.Event || ''
+        return `<li class="log-item ${e.direction}">
+          <span class="log-arrow">${e.direction === 'out' ? '→' : '←'}</span>
+          <span style="flex:1">
+            <span class="log-event">${eventName}</span>
+            <span style="opacity:.6;font-size:.7rem;display:block;word-break:break-all">${JSON.stringify(e.payload)}</span>
+          </span>
+          <span class="log-time">${time}</span>
+        </li>`
+      }).join('')
+    } catch (_) {}
+  }
+
+  // -----------------------------------------------------------------------
+  // Helpers
+  // -----------------------------------------------------------------------
+  function fillForm (data) {
+    const form = document.getElementById('profileForm')
+    Object.entries(data).forEach(([k, v]) => {
+      const el = form.elements[k]
+      if (el) el.value = v
+    })
+  }
+
+  function getFormData () {
+    return Object.fromEntries(new FormData(document.getElementById('profileForm')))
+  }
+
+  function showToast (msg) {
+    const t = document.getElementById('toast')
+    t.textContent = msg
+    t.classList.add('show')
+    setTimeout(() => t.classList.remove('show'), 2000)
+  }
+
+  init()
+  pollStatus()
+  pollReaderStatus()
+  setInterval(pollStatus, 2000)
+  setInterval(pollReaderStatus, 1500)
+</script>
+</body>
+</html>
