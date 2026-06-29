@@ -49,8 +49,10 @@ let currentProfile = {
   LaserID: 'ME1234567890'
 }
 
-const MOCK_PHOTO =
+const DEFAULT_PHOTO =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+
+let currentPhoto = DEFAULT_PHOTO
 
 const eventLog = []
 function logEvent (direction, payload) {
@@ -91,7 +93,7 @@ function triggerSuccess () {
     setTimeout(() => broadcast({ Event: 'OnCardLoadProgress', Progress: p }), (i + 1) * 500)
   )
   setTimeout(() =>
-    broadcast({ Event: 'OnCardLoadCompleted', Data: profileBase64, PhotoImage: MOCK_PHOTO }), 3500
+    broadcast({ Event: 'OnCardLoadCompleted', Data: profileBase64, PhotoImage: currentPhoto }), 3500
   )
 }
 
@@ -126,8 +128,10 @@ cardReader.on('card-removed', () => {
   if (readerState.status !== 'done') readerState.status = 'waiting'
 })
 
-cardReader.on('card-data', (profile) => {
+cardReader.on('card-data', (data) => {
+  const { PhotoImage, ...profile } = data
   currentProfile = profile
+  if (PhotoImage) currentPhoto = PhotoImage
   readerState.status = 'done'
   console.log('[card-reader] Profile captured:', profile.NationalID)
 })
@@ -168,6 +172,9 @@ function handleRequest (req, res) {
   if (req.method === 'GET' && url.pathname === '/api/reader-status') {
     return json(readerState)
   }
+  if (req.method === 'GET' && url.pathname === '/api/photo') {
+    return json({ photo: currentPhoto })
+  }
 
   if (req.method === 'POST') {
     let body = ''
@@ -176,7 +183,17 @@ function handleRequest (req, res) {
       try {
         const data = body ? JSON.parse(body) : {}
         if (url.pathname === '/api/profile') {
-          currentProfile = { ...currentProfile, ...data }
+          const { PhotoImage, ...profileFields } = data
+          currentProfile = { ...currentProfile, ...profileFields }
+          if (PhotoImage) currentPhoto = PhotoImage
+          return json({ success: true })
+        }
+        if (url.pathname === '/api/photo') {
+          if (data.photo) {
+            currentPhoto = data.photo.replace(/^data:image\/[^;]+;base64,/, '')
+          } else if (data.reset) {
+            currentPhoto = DEFAULT_PHOTO
+          }
           return json({ success: true })
         }
         if (url.pathname === '/api/reader/start') {

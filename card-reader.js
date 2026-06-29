@@ -65,6 +65,25 @@ async function readBinary (card, length) {
   return Buffer.concat(chunks)
 }
 
+// Like readBinary but reads until end of file (stops on SW 0x6282 or partial chunk)
+async function readAllBinary (card, maxLength) {
+  const chunks = []
+  let offset = 0
+  while (offset < maxLength) {
+    const chunk = Math.min(0xFE, maxLength - offset)
+    const resp = await transmit(card, APDU.read(offset, chunk))
+    const sw = resp.length >= 2 ? resp.readUInt16BE(resp.length - 2) : 0
+    if (sw === 0x6B00 || sw === 0x6282) break
+    if (!isSuccess(resp)) throw new Error(`Read failed at offset ${offset}: ${resp.toString('hex')}`)
+    const data = responseData(resp)
+    if (data.length === 0) break
+    chunks.push(data)
+    offset += data.length
+    if (data.length < chunk) break
+  }
+  return Buffer.concat(chunks)
+}
+
 async function readThaiIDCard (card) {
   // Select Thai ID card application
   let resp = await transmit(card, APDU.SELECT_THAI_ID)
@@ -120,6 +139,20 @@ async function readThaiIDCard (card) {
   const Amphur   = decodeTIS620(addrBuf.slice(offA, offA + 40));  offA += 40
   const Province = decodeTIS620(addrBuf.slice(offA, offA + 40));
 
+  // --- Photo ---
+  let PhotoImage = ''
+  try {
+    resp = await transmit(card, APDU.SELECT_PHOTO)
+    if (isSuccess(resp)) {
+      const photoBuf = await readAllBinary(card, 30000)
+      if (photoBuf.length > 0) {
+        PhotoImage = photoBuf.toString('base64')
+      }
+    }
+  } catch (_) {
+    // Photo is optional; ignore read errors
+  }
+
   return {
     NationalID,
     ThaiTitleName,
@@ -141,7 +174,8 @@ async function readThaiIDCard (card) {
     ExpireDate,
     ChipID: '0000000000001',
     RequestNo: '',
-    LaserID: LaserID || ''
+    LaserID: LaserID || '',
+    PhotoImage
   }
 }
 

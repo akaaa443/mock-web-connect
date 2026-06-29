@@ -61,6 +61,82 @@
       margin-bottom: 14px;
     }
 
+    /* Photo section */
+    .photo-section {
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+      padding: 14px;
+      background: #fafafa;
+      border: 1.5px solid #e5e5e5;
+      border-radius: 10px;
+      margin-top: 20px;
+      margin-bottom: 20px;
+    }
+    .photo-preview {
+      width: 100px;
+      height: 125px;
+      border-radius: 6px;
+      object-fit: cover;
+      background: #e5e5e5;
+      border: 1px solid #ddd;
+      flex-shrink: 0;
+    }
+    .photo-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex: 1;
+    }
+    .photo-actions span.label {
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: #555;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    .photo-actions span.hint {
+      font-size: 0.72rem;
+      color: #888;
+      line-height: 1.4;
+    }
+    .photo-btns {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .photo-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 12px;
+      border: none;
+      border-radius: 7px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: opacity .15s;
+    }
+    .photo-btn:hover { opacity: .8; }
+    .btn-photo-upload { background: #e0f2fe; color: #0369a1; }
+    .btn-photo-reset  { background: #fef2f2; color: #b91c1c; }
+    .photo-drop-zone {
+      border: 1.5px dashed #ccc;
+      border-radius: 8px;
+      padding: 8px;
+      text-align: center;
+      font-size: 0.72rem;
+      color: #aaa;
+      transition: border-color .15s, background .15s;
+    }
+    .photo-drop-zone.drag-over {
+      border-color: #6366f1;
+      background: #eef2ff;
+      color: #4338ca;
+    }
+    #photoInput { display: none; }
+
     /* File import/export row */
     .file-row {
       display: flex;
@@ -329,6 +405,22 @@
           <input type="text" name="LaserID" />
         </div>
       </div>
+      <!-- Photo upload -->
+      <div class="photo-section">
+        <img id="photoPreview" class="photo-preview" alt="Card photo" />
+        <div class="photo-actions">
+          <span class="label">📷 Card Photo</span>
+          <span class="hint">This photo is sent as PhotoImage in OnCardLoadCompleted.<br>Supports PNG, JPEG, WebP.</span>
+          <div class="photo-btns">
+            <input type="file" id="photoInput" accept="image/*" onchange="onPhotoBrowse(event)" />
+            <button class="photo-btn btn-photo-upload" onclick="document.getElementById('photoInput').click()">📁 Choose Image</button>
+            <button class="photo-btn btn-photo-reset" onclick="resetPhoto()">↺ Reset to Default</button>
+          </div>
+          <div class="photo-drop-zone" id="photoDropZone">
+            Drop image here
+          </div>
+        </div>
+      </div>
       <button type="submit" class="save-btn">💾 Apply to Server</button>
     </form>
   </div>
@@ -407,7 +499,11 @@
     reader.onload = (e) => {
       try {
         const data = JSON.parse(e.target.result)
-        fillForm(data)
+        const { PhotoImage, ...profileFields } = data
+        fillForm(profileFields)
+        if (PhotoImage) {
+          uploadPhotoBase64(PhotoImage)
+        }
         document.getElementById('loadedFileName').textContent = file.name
         document.getElementById('loadedFileName').style.color = '#5b21b6'
         showToast(`📂 Loaded: ${file.name}`)
@@ -416,15 +512,19 @@
       }
     }
     reader.readAsText(file)
-    // reset so the same file can be re-selected
     event.target.value = ''
   }
 
   // -----------------------------------------------------------------------
   // Download current form as .json
   // -----------------------------------------------------------------------
-  function downloadProfile () {
+  async function downloadProfile () {
     const data = getFormData()
+    try {
+      const r = await fetch(`${BASE}/api/photo`)
+      const { photo } = await r.json()
+      data.PhotoImage = photo
+    } catch (_) {}
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
@@ -492,6 +592,7 @@
       if (s.status === 'done') {
         const profile = await (await fetch(`${BASE}/api/profile`)).json()
         fillForm(profile)
+        refreshPhotoPreview()
         document.getElementById('loadedFileName').textContent = 'Cloned from physical card'
         document.getElementById('loadedFileName').style.color = '#7e22ce'
       }
@@ -540,6 +641,76 @@
     return Object.fromEntries(new FormData(document.getElementById('profileForm')))
   }
 
+  // -----------------------------------------------------------------------
+  // Photo handling
+  // -----------------------------------------------------------------------
+  function onPhotoBrowse (event) {
+    const file = event.target.files[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      // Strip data URL prefix, keep raw base64
+      const base64 = e.target.result.split(',')[1]
+      uploadPhotoBase64(base64)
+    }
+    reader.readAsDataURL(file)
+    event.target.value = ''
+  }
+
+  async function uploadPhotoBase64 (base64) {
+    await fetch(`${BASE}/api/photo`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ photo: base64 })
+    })
+    refreshPhotoPreview()
+    showToast('📷 Photo updated!')
+  }
+
+  async function resetPhoto () {
+    await fetch(`${BASE}/api/photo`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reset: true })
+    })
+    refreshPhotoPreview()
+    showToast('↺ Photo reset to default')
+  }
+
+  async function refreshPhotoPreview () {
+    try {
+      const r = await fetch(`${BASE}/api/photo`)
+      const { photo } = await r.json()
+      const img = document.getElementById('photoPreview')
+      img.src = `data:image/png;base64,${photo}`
+    } catch (_) {}
+  }
+
+  // Drag-and-drop on the drop zone
+  const dropZone = document.getElementById('photoDropZone')
+  dropZone.addEventListener('dragover', (e) => {
+    e.preventDefault()
+    dropZone.classList.add('drag-over')
+  })
+  dropZone.addEventListener('dragleave', () => {
+    dropZone.classList.remove('drag-over')
+  })
+  dropZone.addEventListener('drop', (e) => {
+    e.preventDefault()
+    dropZone.classList.remove('drag-over')
+    const file = e.dataTransfer.files[0]
+    if (!file || !file.type.startsWith('image/')) {
+      showToast('Please drop an image file')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const base64 = ev.target.result.split(',')[1]
+      uploadPhotoBase64(base64)
+    }
+    reader.readAsDataURL(file)
+  })
+
   function showToast (msg) {
     const t = document.getElementById('toast')
     t.textContent = msg
@@ -548,6 +719,7 @@
   }
 
   init()
+  refreshPhotoPreview()
   pollStatus()
   pollReaderStatus()
   setInterval(pollStatus, 2000)

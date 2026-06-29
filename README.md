@@ -7,8 +7,8 @@ A mock WebSocket server that simulates the AIS Web Connect ID card reader device
 ## Features
 
 - **WebSocket mock** — simulates the full AIS Web Connect event flow (`OnInitialized` → `OnCardInserted` → `OnCardLoadProgress` → `OnCardLoadCompleted`)
-- **Control panel UI** — edit ID card profile, manually trigger success/failure events
-- **Download / Browse** — export the current profile as `.json` or import a saved profile file
+- **Control panel UI** — edit ID card profile, upload a custom card photo, manually trigger success/failure events
+- **Download / Browse** — export the current profile (with photo) as `.json` or import a saved profile file
 - **Clone Real Card** — read data from a physical Thai ID card via PC/SC smart card reader and auto-fill the form
 
 ---
@@ -101,10 +101,12 @@ Edit all fields of the mock Thai ID card profile.
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/api/profile` | Get current active profile |
-| `POST` | `/api/profile` | Update current profile (JSON body) |
+| `POST` | `/api/profile` | Update current profile (JSON body, may include `PhotoImage`) |
 | `GET` | `/api/status` | Connection count + last 20 WebSocket events |
 | `GET` | `/api/reader-status` | Physical card reader state |
 | `POST` | `/api/reader/start` | (Re)start PC/SC reader listener |
+| `GET` | `/api/photo` | Get current card photo (base64) |
+| `POST` | `/api/photo` | Set card photo (`{ "photo": "<base64>" }`), or reset to default (`{ "reset": true }`) |
 | `POST` | `/api/trigger/insert` | Send `OnCardInserted` |
 | `POST` | `/api/trigger/success` | Send full read success sequence |
 | `POST` | `/api/trigger/failed` | Send `OnCardLoadError` (optional `{ "message": "..." }`) |
